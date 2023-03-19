@@ -1,0 +1,69 @@
+#Install necessary Packages
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(janitor)
+
+#Import the data into R
+Lesson_c <- read_csv("C:\\Users\\HP\\Desktop\\Schools\\Lesson completion.csv")
+Pupil_scr <- read_csv("C:\\Users\\HP\\Desktop\\Schools\\Pupil scores.csv")
+Pupil_att <- read_csv("C:\\Users\\HP\\Desktop\\Schools\\Pupil attendance.csv")
+Sch_info <- read_csv("C:\\Users\\HP\\Desktop\\Schools\\School_information.csv")
+
+#check for duplicates in the data
+get_dupes(Lesson_c)
+get_dupes(Pupil_scr)
+get_dupes(Pupil_att)
+get_dupes(Sch_info)
+
+#merge  files
+list_df = list(Pupil_att,Pupil_scr,Lesson_c)
+comb <- list_df%>% reduce(inner_join, by = "school_id")
+comb <- comb[,-c(6,7)]
+
+#merge files for school
+list_df2 = list(Pupil_scr,Sch_info)
+comb2 <- list_df2%>% reduce(inner_join, by = "school_id")
+
+#check for missing values and remove them
+which(is.na(comb))
+comb <- comb%>% drop_na()
+comb2 <- comb2%>% drop_na()
+
+#calculating average scores by grade
+gr_avg <- filter(comb %>% group_by(grade),subject =='Fluency') %>%
+  summarise(mean_score_fluency = mean(score),
+            .groups = 'drop')
+
+gr_reg <- filter(comb2 %>% group_by(region,grade),subject =='Fluency') %>%
+  summarise(mean_score = mean(score),
+            .groups = 'drop')
+
+#Sort minimum values of Fluency scores across merged cells
+gr_srt <- gr_reg %>% 
+  group_by(grade)%>% 
+  filter( mean_score == min(mean_score))
+
+gr_srt2 <- gr_reg %>% 
+  group_by(grade)%>% 
+  filter( mean_score == max(mean_score))
+
+# Creating a binary variable for students Fluency Scores
+comb3 <- filter(comb2, subject == "Fluency")
+comb3 <- comb3[,-(4)]
+comb4 <- comb3[,-c(2,5,6,7)]
+comb4$binary_var <- ifelse(comb3$score <= 10, 1, 0)
+comb5 <- filter(comb4, binary_var == 1)
+
+#Plot a bar chart 
+ggplot(comb5, aes(x = grade))+
+  geom_bar(aes(fill = grade))
+
+#counting number of pupils scoring 10 or lower in grade 3
+hi_shr <- comb5 %>%
+  group_by(grade, school_id)%>%
+  summarise(count_1 = sum(binary_var == 1), n = n())%>%
+  filter(grade == "Grade 3")
+  
+hi_shr<- hi_shr[order(hi_shr$count_1, decreasing =TRUE),]
